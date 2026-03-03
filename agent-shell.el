@@ -2400,11 +2400,10 @@ by default, RENDER-BODY-IMAGES to enable inline image rendering in body."
              ((with-current-buffer viewport-buffer
                 (derived-mode-p 'agent-shell-viewport-view-mode))))
     (with-current-buffer viewport-buffer
-      (let ((inhibit-read-only t))
-        ;; TODO: Investigate why save-restriction isn't enough
-        ;; to save point. Saving (point) for now.
-        (when-let* ((saved-point (point))
-                    (range (agent-shell-ui-update-fragment
+      (let ((inhibit-read-only t)
+            (auto-scroll (eobp))
+            (saved-point (point-marker)))
+        (when-let* ((range (agent-shell-ui-update-fragment
                             (agent-shell-ui-make-fragment-model
                              :namespace-id (or namespace-id
                                                (map-elt state :request-count))
@@ -2441,7 +2440,9 @@ by default, RENDER-BODY-IMAGES to enable inline image rendering in body."
               (let ((markdown-overlays-highlight-blocks agent-shell-highlight-blocks)
                     (markdown-overlays-render-images nil))
                 (markdown-overlays-put))))
-          (goto-char saved-point)))))
+          (if auto-scroll
+              (goto-char (point-max))
+            (goto-char saved-point))))))
   (with-current-buffer (map-elt state :buffer)
     (unless (and (derived-mode-p 'agent-shell-mode)
                  (equal (current-buffer)
