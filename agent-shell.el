@@ -1985,17 +1985,36 @@ For example, shut down ACP client."
   (agent-shell-heartbeat-stop
    :heartbeat (map-elt (agent-shell--state) :heartbeat)))
 
-(defun agent-shell--dot-subdir (subdir)
-  "Return path to .agent-shell/SUBDIR under project root, creating it if needed.
-When the directory is first created inside a git repo and
-.agent-shell/ is not yet ignored, automatically add it to .gitignore.
+(defcustom agent-shell-dot-subdir-function #'agent-shell--dot-subdir-in-repo
+  "Function used by `agent-shell--dot-subdir' to resolve subdirectory paths.
+Called with one argument, SUBDIR (a string such as \"screenshots\" or
+\"transcripts\"), and must return the absolute path to that subdirectory.
+Directory creation is handled by `agent-shell--dot-subdir', not by this
+function."
+  :type '(choice (const :tag "In repo (.agent-shell/)" agent-shell--dot-subdir-in-repo)
+                 (function :tag "Custom function"))
+  :group 'agent-shell)
+
+(defun agent-shell--dot-subdir-in-repo (subdir)
+  "Return path to .agent-shell/SUBDIR under the project root.
 
 For example:
 
-  (agent-shell--dot-subdir \"screenshots\")
-  => \"/path/to/project/.agent-shell/screenshots/\""
-  (let ((dir (expand-file-name (file-name-concat ".agent-shell" subdir)
-                               (agent-shell-cwd))))
+  (agent-shell--dot-subdir-in-repo \"screenshots\")
+  => \"/path/to/project/.agent-shell/screenshots\""
+  (expand-file-name (file-name-concat ".agent-shell" subdir)
+                    (agent-shell-cwd)))
+
+(defun agent-shell--dot-subdir (subdir)
+  "Return path to SUBDIR for agent-shell data, creating it if needed.
+Calls `agent-shell-dot-subdir-function' to resolve the path.
+When the directory is first created inside a git repo and
+.agent-shell/ is not yet ignored, automatically add it to .gitignore."
+  (unless (functionp agent-shell-dot-subdir-function)
+    (error "agent-shell-dot-subdir-function must be set to a function"))
+  (let ((dir (funcall agent-shell-dot-subdir-function subdir)))
+    (unless (and (stringp dir) (not (string-empty-p (string-trim dir))))
+      (error "Failed to resolve agent-shell data directory (subdir: %s). Resulting directory is not a non-empty string (dir: %s)" subdir dir))
     (unless (file-directory-p dir)
       (make-directory dir t)
       (agent-shell--ensure-gitignore (agent-shell-cwd)))

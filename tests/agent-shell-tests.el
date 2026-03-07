@@ -1561,5 +1561,86 @@ code block content
           (should-not (string-match-p "test-session-id"
                                       (substring-no-properties header))))))))
 
+;;; Tests for agent-shell--dot-subdir-in-repo
+
+(ert-deftest agent-shell--dot-subdir-in-repo-returns-path-test ()
+  "Test that `agent-shell--dot-subdir-in-repo' returns the correct path."
+  (cl-letf (((symbol-function 'agent-shell-cwd)
+             (lambda () "/home/user/myproject")))
+    (should (equal (agent-shell--dot-subdir-in-repo "screenshots")
+                   "/home/user/myproject/.agent-shell/screenshots"))))
+
+;;; Tests for agent-shell--dot-subdir
+
+(ert-deftest agent-shell--dot-subdir-creates-directory-test ()
+  "Test that `agent-shell--dot-subdir' creates the directory."
+  (let* ((temp-dir (make-temp-file "agent-shell-test" t))
+         (expected-dir (expand-file-name ".agent-shell/screenshots" temp-dir)))
+    (unwind-protect
+        (cl-letf (((symbol-function 'agent-shell-cwd) (lambda () temp-dir))
+                  ((symbol-function 'agent-shell--ensure-gitignore) #'ignore))
+          (let ((agent-shell-dot-subdir-function #'agent-shell--dot-subdir-in-repo))
+            (agent-shell--dot-subdir "screenshots")
+            (should (file-directory-p expected-dir))))
+      (delete-directory temp-dir t))))
+
+(ert-deftest agent-shell--dot-subdir-returns-path-test ()
+  "Test that `agent-shell--dot-subdir' returns the resolved path."
+  (let* ((temp-dir (make-temp-file "agent-shell-test" t))
+         (expected-dir (expand-file-name ".agent-shell/screenshots" temp-dir)))
+    (unwind-protect
+        (cl-letf (((symbol-function 'agent-shell-cwd) (lambda () temp-dir))
+                  ((symbol-function 'agent-shell--ensure-gitignore) #'ignore))
+          (let ((agent-shell-dot-subdir-function #'agent-shell--dot-subdir-in-repo))
+            (should (equal (agent-shell--dot-subdir "screenshots") expected-dir))))
+      (delete-directory temp-dir t))))
+
+(ert-deftest agent-shell--dot-subdir-noop-if-directory-exists-test ()
+  "Test that `agent-shell--dot-subdir' does not error if the directory already exists."
+  (let* ((temp-dir (make-temp-file "agent-shell-test" t))
+         (expected-dir (expand-file-name ".agent-shell/screenshots" temp-dir)))
+    (unwind-protect
+        (cl-letf (((symbol-function 'agent-shell-cwd) (lambda () temp-dir))
+                  ((symbol-function 'agent-shell--ensure-gitignore) #'ignore))
+          (let ((agent-shell-dot-subdir-function #'agent-shell--dot-subdir-in-repo))
+            (make-directory expected-dir t)
+            (should (equal (agent-shell--dot-subdir "screenshots") expected-dir))
+            (should (file-directory-p expected-dir))))
+      (delete-directory temp-dir t))))
+
+(ert-deftest agent-shell--dot-subdir-uses-configured-function-test ()
+  "Test that `agent-shell--dot-subdir' delegates to `agent-shell-dot-subdir-function'."
+  (let* ((temp-dir (make-temp-file "agent-shell-test" t))
+         (custom-called-with nil))
+    (unwind-protect
+        (cl-letf (((symbol-function 'agent-shell-cwd) (lambda () temp-dir))
+                  ((symbol-function 'agent-shell--ensure-gitignore) #'ignore))
+          (let ((agent-shell-dot-subdir-function
+                 (lambda (subdir)
+                   (setq custom-called-with subdir)
+                   (expand-file-name subdir temp-dir))))
+            (agent-shell--dot-subdir "screenshots")
+            (should (equal custom-called-with "screenshots"))))
+      (delete-directory temp-dir t))))
+
+(ert-deftest agent-shell--dot-subdir-errors-if-function-not-callable-test ()
+  "Test that `agent-shell--dot-subdir' errors when `agent-shell-dot-subdir-function' is not a function."
+  (let ((agent-shell-dot-subdir-function "not-a-function"))
+    (should-error (agent-shell--dot-subdir "screenshots") :type 'error)))
+
+(ert-deftest agent-shell--dot-subdir-errors-if-function-returns-non-string-test ()
+  "Test that `agent-shell--dot-subdir' errors when `agent-shell-dot-subdir-function' returns a non-string."
+  (cl-letf (((symbol-function 'agent-shell-cwd) (lambda () "/tmp")))
+    (let ((agent-shell-dot-subdir-function (lambda (_subdir) nil)))
+      (should-error (agent-shell--dot-subdir "screenshots") :type 'error))
+    (let ((agent-shell-dot-subdir-function (lambda (_subdir) 42)))
+      (should-error (agent-shell--dot-subdir "screenshots") :type 'error))))
+
+(ert-deftest agent-shell--dot-subdir-errors-if-function-returns-blank-string-test ()
+  "Test that `agent-shell--dot-subdir' errors when `agent-shell-dot-subdir-function' returns a blank string."
+  (cl-letf (((symbol-function 'agent-shell-cwd) (lambda () "/tmp")))
+    (let ((agent-shell-dot-subdir-function (lambda (_subdir) "  ")))
+      (should-error (agent-shell--dot-subdir "screenshots") :type 'error))))
+
 (provide 'agent-shell-tests)
 ;;; agent-shell-tests.el ends here
