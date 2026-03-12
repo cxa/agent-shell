@@ -438,6 +438,67 @@
     (let ((uris (agent-shell--collect-attached-files blocks)))
       (should (= (length uris) 2)))))
 
+(ert-deftest agent-shell--get-files-context-adds-image-field-test ()
+  "Test `agent-shell--get-files-context' marks image content as one field."
+  (let ((temp-file (make-temp-file "agent-shell-context" nil ".png")))
+    (unwind-protect
+        (cl-letf (((symbol-function 'agent-shell--load-image)
+                   (lambda (&rest _) 'fake-image)))
+          (let ((text (agent-shell--get-files-context :files (list temp-file))))
+            (should (eq (get-text-property 0 'field text)
+                        'agent-shell--image-field))))
+      (delete-file temp-file))))
+
+(ert-deftest agent-shell--get-files-context-leaves-non-image-without-field-test ()
+  "Test `agent-shell--get-files-context' leaves non-image files unchanged."
+  (let ((temp-file (make-temp-file "agent-shell-context" nil ".txt")))
+    (unwind-protect
+        (cl-letf (((symbol-function 'agent-shell--load-image)
+                   (lambda (&rest _) nil)))
+          (let ((text (agent-shell--get-files-context :files (list temp-file))))
+            (should-not (get-text-property 0 'field text))))
+      (delete-file temp-file))))
+
+(ert-deftest agent-shell-delete-char-deletes-image-field-test ()
+  "Test `agent-shell-delete-char' deletes the whole attached image field."
+  (let ((temp-file (make-temp-file "agent-shell-context" nil ".png")))
+    (unwind-protect
+        (cl-letf (((symbol-function 'agent-shell--load-image)
+                   (lambda (&rest _) 'fake-image)))
+          (with-temp-buffer
+            (insert "Prompt\n\n")
+            (insert (agent-shell--get-files-context :files (list temp-file)))
+            (goto-char (point-max))
+            (search-backward "@")
+            (agent-shell-delete-char 1)
+            (should (equal (buffer-string) "Prompt\n\n"))))
+      (delete-file temp-file))))
+
+(ert-deftest agent-shell-backward-delete-char-deletes-image-field-test ()
+  "Test `agent-shell-backward-delete-char' deletes the whole attached image field."
+  (let ((temp-file (make-temp-file "agent-shell-context" nil ".png")))
+    (unwind-protect
+        (cl-letf (((symbol-function 'agent-shell--load-image)
+                   (lambda (&rest _) 'fake-image)))
+          (with-temp-buffer
+            (insert "Prompt\n\n")
+            (insert (agent-shell--get-files-context :files (list temp-file)))
+            (goto-char (point-max))
+            (agent-shell-backward-delete-char 1)
+            (should (equal (buffer-string) "Prompt\n\n"))))
+      (delete-file temp-file))))
+
+(ert-deftest agent-shell-mode-delete-keybindings-test ()
+  "Test `agent-shell-mode-map' binds delete keys for attached files."
+  (should (eq (lookup-key agent-shell-mode-map (kbd "C-d"))
+              #'agent-shell-delete-char))
+  (should (eq (lookup-key agent-shell-mode-map (kbd "DEL"))
+              #'agent-shell-backward-delete-char))
+  (should (eq (lookup-key agent-shell-mode-map (kbd "<backspace>"))
+              #'agent-shell-backward-delete-char))
+  (should (eq (lookup-key agent-shell-mode-map (kbd "<delete>"))
+              #'agent-shell-delete-char)))
+
 (ert-deftest agent-shell--send-command-integration-test ()
   "Integration test: verify agent-shell--send-command calls ACP correctly."
   (let ((sent-request nil)

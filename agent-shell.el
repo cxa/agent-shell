@@ -998,6 +998,10 @@ END from the buffer."
 (defvar-keymap agent-shell-mode-map
   :parent shell-maker-mode-map
   :doc "Keymap for `agent-shell-mode'."
+  "C-d" #'agent-shell-delete-char
+  "DEL" #'agent-shell-backward-delete-char
+  "<backspace>" #'agent-shell-backward-delete-char
+  "<delete>" #'agent-shell-delete-char
   "TAB" #'agent-shell-next-item
   "<backtab>" #'agent-shell-previous-item
   "n" #'agent-shell-next-item
@@ -4468,6 +4472,36 @@ inserted into the shell buffer prompt."
 
 ;;; Completion
 
+(defun agent-shell--delete-image-field (pos)
+  "Delete the inserted image field at POS.
+
+Return non-nil when an image field was deleted."
+  (when (eq (get-text-property pos 'field) 'agent-shell--image-field)
+    (delete-field
+     (if (and (< pos (point-max))
+              (eq (get-text-property (1+ pos) 'field)
+                  'agent-shell--image-field))
+         (1+ pos)
+       pos))
+    t))
+
+(put 'agent-shell-delete-char 'delete-selection 'supersede)
+(defun agent-shell-delete-char (&optional arg)
+  "Delete the next ARG characters or attached image field at point."
+  (interactive "*p")
+  (unless (and (= (or arg 1) 1)
+               (agent-shell--delete-image-field (point)))
+    (delete-char (or arg 1))))
+
+(put 'agent-shell-backward-delete-char 'delete-selection 'supersede)
+(defun agent-shell-backward-delete-char (&optional arg)
+  "Delete the previous ARG characters or attached image field before point."
+  (interactive "*p")
+  (unless (and (= (or arg 1) 1)
+               (> (point) (point-min))
+               (agent-shell--delete-image-field (1- (point))))
+    (delete-char (- (or arg 1)))))
+
 (cl-defun agent-shell--get-files-context (&key files agent-cwd)
   "Process FILES into sendable text with image preview if applicable.
 
@@ -4480,17 +4514,19 @@ Uses AGENT-CWD to shorten file paths where necessary."
                                           :file-path file
                                           :max-width 200)))
                      ;; Propertize text to display the image
-                     (agent-shell-ui-add-action-to-text
-                      (propertize (concat "@" file)
-                                  'display image-display
-                                  'pointer 'hand)
-                      (lambda ()
-                        (interactive)
-                        (find-file file))
-                      (lambda ()
-                        (message "Press RET to open"))
-                      ;; No link face for image (no underline).
-                      nil)
+                     (propertize
+                      (agent-shell-ui-add-action-to-text
+                       (propertize (concat "@" file)
+                                   'display image-display
+                                   'pointer 'hand)
+                       (lambda ()
+                         (interactive)
+                         (find-file file))
+                       (lambda ()
+                         (message "Press RET to open"))
+                       ;; No link face for image (no underline).
+                       nil)
+                      'field 'agent-shell--image-field)
                    ;; Not an image, insert as normal text
                    (agent-shell-ui-add-action-to-text
                     (if (and agent-cwd (file-in-directory-p file agent-cwd))
