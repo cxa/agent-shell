@@ -285,15 +285,13 @@ Optionally set its PROMPT and RESPONSE."
     (when-let ((shell-buffer (agent-shell-viewport--shell-buffer)))
       (with-current-buffer shell-buffer
         (unless (eq agent-shell-header-style 'graphical)
-          ;; Insert read-only newline at the point-min
-          ;; purely for display/layout purpose. This
-          ;; is only needed for non-graphical header.
+          ;; Insert newline at point-min purely for
+          ;; display/layout. Only needed for non-graphical header.
           (with-current-buffer viewport-buffer
             (insert (propertize "\n"
-                                'read-only t
                                 'cursor-intangible t
-                                'front-sticky '(read-only cursor-intangible)
-                                'rear-nonsticky '(read-only cursor-intangible)))))))
+                                'front-sticky '(cursor-intangible)
+                                'rear-nonsticky '(cursor-intangible)))))))
     (when prompt
       (insert
        (if (derived-mode-p 'agent-shell-viewport-view-mode)
@@ -634,12 +632,12 @@ With EXISTING-ONLY, only return existing buffers without creating."
         (insert (if snapshot
                     "\n\n"
                   "") block-quoted-text))
-      ;; Skip past any read-only layout text (e.g. the newline
-      ;; inserted by `agent-shell-viewport--initialize') so buffer
-      ;; is ready to insert text.
+      ;; Skip past any cursor-intangible layout text (e.g. the
+      ;; newline inserted by `agent-shell-viewport--initialize')
+      ;; so callers like `agent-shell-viewport-reply-1' can insert.
       (goto-char (if (or snapshot block-quoted-text)
                      (point-max)
-                   (or (next-single-property-change (point-min) 'read-only)
+                   (or (next-single-property-change (point-min) 'cursor-intangible)
                        (point-max)))))
     ;; Setting point isn't enough at times. Force scrolling.
     (set-window-start (selected-window) (point-min))))
