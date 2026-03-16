@@ -1208,6 +1208,45 @@ code block content
         (should (equal (map-elt (map-elt data :tool-call) :title)
                        "Run command"))))))
 
+(ert-deftest agent-shell-mode-hook-subscriptions-survive-state-init ()
+  "Subscriptions registered via `agent-shell-mode-hook' should persist."
+  (let ((test-buffer nil)
+        (hook-fn (lambda ()
+                   (agent-shell-subscribe-to
+                    :shell-buffer (current-buffer)
+                    :event 'turn-complete
+                    :on-event #'ignore)))
+        (fake-process (start-process "fake-agent" nil "cat"))
+        (config (list (cons :buffer-name "test-agent")
+                      (cons :client-maker
+                            (lambda (_buf)
+                              (list (cons :command "cat")))))))
+    (unwind-protect
+        (progn
+          (add-hook 'agent-shell-mode-hook hook-fn)
+          (cl-letf (((symbol-function 'shell-maker-start)
+                     (lambda (_config &rest _args)
+                       (setq test-buffer (get-buffer-create "*test-agent-shell*"))
+                       (with-current-buffer test-buffer
+                         (setq major-mode 'agent-shell-mode)
+                         (run-hooks 'agent-shell-mode-hook))
+                       test-buffer))
+                    ((symbol-function 'shell-maker--process) (lambda () fake-process))
+                    ((symbol-function 'shell-maker-finish-output) #'ignore)
+                    (agent-shell-file-completion-enabled nil))
+            (let* ((shell-buffer (agent-shell--start :config config
+                                                     :no-focus t
+                                                     :new-session t))
+                   (subs (map-elt (buffer-local-value 'agent-shell--state shell-buffer)
+                                  :event-subscriptions)))
+              (should (= 1 (length subs)))
+              (should (eq 'turn-complete (map-elt (car subs) :event))))))
+      (remove-hook 'agent-shell-mode-hook hook-fn)
+      (when (process-live-p fake-process)
+        (delete-process fake-process))
+      (when (and test-buffer (buffer-live-p test-buffer))
+        (kill-buffer test-buffer)))))
+
 (ert-deftest agent-shell--initiate-session-prefers-list-and-load-when-supported ()
   "Test `agent-shell--initiate-session' prefers session/list + session/load."
   (with-temp-buffer
