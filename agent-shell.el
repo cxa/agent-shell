@@ -869,11 +869,13 @@ Always prompts for agent selection, even if existing shells are available."
   (agent-shell '(4)))
 
 ;;;###autoload
-(defun agent-shell-restart ()
+(cl-defun agent-shell-restart (&key session-id)
   "Clear conversation by restarting the agent shell in the same project.
 
 Kills the current shell buffer (shutting down the ACP client) and
 starts a fresh shell with the same agent configuration.
+
+When SESSION-ID is provided, resume that session instead of starting new.
 
 Works from both shell and viewport buffers."
   (declare (modes agent-shell-mode
@@ -898,12 +900,30 @@ Works from both shell and viewport buffers."
     (let ((new-shell-buffer (agent-shell--start
                              :config config
                              :session-strategy strategy
+                             :session-id session-id
                              :new-session t
                              :no-focus t)))
       (if (or from-viewport agent-shell-prefer-viewport-interaction)
           (agent-shell-viewport--show-buffer
            :shell-buffer new-shell-buffer)
         (agent-shell--display-buffer new-shell-buffer)))))
+
+;;;###autoload
+(defun agent-shell-reload ()
+  "Reload the current session by restarting with the same session ID.
+
+Works from both shell and viewport buffers."
+  (declare (modes agent-shell-mode
+                  agent-shell-viewport-view-mode
+                  agent-shell-viewport-edit-mode))
+  (interactive)
+  (let* ((shell-buffer (or (agent-shell--current-shell)
+                           (user-error "Not in a shell or viewport buffer")))
+         (session-id (map-nested-elt (buffer-local-value 'agent-shell--state shell-buffer)
+                                     '(:session :id))))
+    (unless session-id
+      (user-error "No active session to reload"))
+    (agent-shell-restart :session-id session-id)))
 
 ;;;###autoload
 (defun agent-shell-resume-session (session-id)
